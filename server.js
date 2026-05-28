@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -11,6 +12,37 @@ const PORT = process.env.PORT || 3000;
 
 // Trust proxy configuration for Render reverse-proxies
 app.set('trust proxy', 1);
+
+// Local JSON Persistence Setup
+const DATA_DIR = path.join(__dirname, 'data');
+const DATA_FILE = path.join(DATA_DIR, 'applications.json');
+
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR);
+}
+if (!fs.existsSync(DATA_FILE)) {
+  fs.writeFileSync(DATA_FILE, JSON.stringify([]));
+}
+
+function getApplications() {
+  try {
+    const data = fs.readFileSync(DATA_FILE, 'utf8');
+    return JSON.parse(data);
+  } catch (err) {
+    console.error('Error reading applications file:', err);
+    return [];
+  }
+}
+
+function saveApplications(apps) {
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(apps, null, 2), 'utf8');
+    return true;
+  } catch (err) {
+    console.error('Error writing applications file:', err);
+    return false;
+  }
+}
 
 // Security configuration using Helmet
 app.use(
@@ -180,6 +212,22 @@ app.post('/api/apply', applicationLimiter, async (req, res) => {
   try {
     let fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || 'noreply@paisatap.com';
     const adminEmail = process.env.SMTP_USER || process.env.SMTP_FROM_EMAIL;
+
+    // Save application details to local JSON file
+    const apps = getApplications();
+    const newApp = {
+      id: 'app_' + Date.now() + Math.random().toString(36).substr(2, 5),
+      name: name.trim(),
+      email: email.trim(),
+      telegram: telegramClean,
+      age: ageNumber,
+      consent: consent,
+      status: 'pending',
+      rejectionReason: null,
+      submittedAt: new Date().toISOString()
+    };
+    apps.push(newApp);
+    saveApplications(apps);
     
     // Safety check for Resend: public email domains (like Gmail) cannot be verified.
     // We override to onboarding@resend.dev for testing so it succeeds.
@@ -464,6 +512,270 @@ Time of submission: ${new Date().toISOString()}
     });
   }
 });
+
+// Admin Authentication middleware
+function adminAuth(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const password = authHeader ? authHeader.replace('Bearer ', '') : req.headers['x-admin-password'];
+  
+  const expectedPassword = process.env.ADMIN_PASSWORD || 'PaisaTapAdmin2026';
+  
+  if (password === expectedPassword) {
+    next();
+  } else {
+    res.status(401).json({ success: false, message: 'Unauthorized access. Invalid password.' });
+  }
+}
+
+// POST API Endpoint for Admin Verification
+app.post('/api/admin/verify', (req, res) => {
+  const { password } = req.body;
+  const expectedPassword = process.env.ADMIN_PASSWORD || 'PaisaTapAdmin2026';
+  if (password === expectedPassword) {
+    return res.status(200).json({ success: true, message: 'Authenticated successfully.' });
+  } else {
+    return res.status(401).json({ success: false, message: 'Invalid password.' });
+  }
+});
+
+// GET API Endpoint to fetch applications
+app.get('/api/admin/applications', adminAuth, (req, res) => {
+  const apps = getApplications();
+  // Sort: pending first, then by submittedAt descending
+  apps.sort((a, b) => {
+    if (a.status === 'pending' && b.status !== 'pending') return -1;
+    if (a.status !== 'pending' && b.status === 'pending') return 1;
+    return new Date(b.submittedAt) - new Date(a.submittedAt);
+  });
+  res.status(200).json({ success: true, applications: apps });
+});
+
+// POST API Endpoint to update status and send outcome email
+app.post('/api/admin/applications/:id/status', adminAuth, async (req, res) => {
+  const { id } = req.params;
+  const { status, rejectionReason } = req.body;
+
+  if (!['approved', 'rejected'].includes(status)) {
+    return res.status(400).json({ success: false, message: 'Invalid status value.' });
+  }
+
+  if (status === 'rejected' && !rejectionReason) {
+    return res.status(400).json({ success: false, message: 'Rejection reason is required.' });
+  }
+
+  const apps = getApplications();
+  const appIndex = apps.findIndex(a => a.id === id);
+
+  if (appIndex === -1) {
+    return res.status(404).json({ success: false, message: 'Application not found.' });
+  }
+
+  const applicant = apps[appIndex];
+  
+  if (applicant.status === status && applicant.rejectionReason === rejectionReason) {
+    return res.status(200).json({ success: true, message: 'Status already up to date.' });
+  }
+
+  applicant.status = status;
+  applicant.rejectionReason = status === 'rejected' ? rejectionReason : null;
+  applicant.processedAt = new Date().toISOString();
+
+  saveApplications(apps);
+
+  // Send status change email
+  sendDecisionEmail(applicant, status, rejectionReason);
+
+  res.status(200).json({ success: true, message: `Application ${status} successfully.` });
+});
+
+// Helper function to send email notification to applicant
+async function sendDecisionEmail(applicant, status, reason) {
+  const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || 'noreply@paisatap.com';
+  let emailSubject = '';
+  let emailText = '';
+  let emailHtml = '';
+
+  if (status === 'approved') {
+    emailSubject = 'PaisaTap - Congratulations! Your Beta Application is Approved';
+    emailText = `Hi ${applicant.name},
+
+Congratulations! We have reviewed your details and approved your application to join the PaisaTap Beta Program!
+
+Here are the next steps to access the tap-to-earn bot:
+1. Join our official announcement channel.
+2. Open Telegram and search for @PaisaTapBetaBot.
+3. Start the bot using your registered Telegram handle: ${applicant.telegram}.
+
+If you have any questions, feel free to contact us at contact@paisatap.com.
+
+Best regards,
+The PaisaTap Team`;
+
+    emailHtml = `
+      <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0d1117; color: #e6edf3; padding: 30px; border-radius: 8px; max-width: 600px; margin: auto; border: 1px solid #2ea043;">
+        <div style="text-align: center; border-bottom: 1px solid #21262d; padding-bottom: 20px; margin-bottom: 20px;">
+          <h1 style="color: #2ea043; margin: 0; font-size: 26px; font-weight: bold;">Application Approved! 🎉</h1>
+          <p style="color: #8b949e; margin: 5px 0 0 0; font-style: italic;">Welcome to the PaisaTap Beta Cohort</p>
+        </div>
+        <div style="font-size: 16px; line-height: 1.6; color: #c9d1d9;">
+          <p>Hi <strong>${applicant.name}</strong>,</p>
+          <p>We have processed your beta tester application and are thrilled to welcome you to the <strong>PaisaTap Beta Program</strong>!</p>
+          
+          <div style="background-color: #161b22; border-left: 4px solid #2ea043; padding: 15px; border-radius: 4px; margin: 20px 0;">
+            <h3 style="color: #ffffff; margin-top: 0; margin-bottom: 8px;">Next Steps for Early Access:</h3>
+            <ol style="margin: 0; padding-left: 20px;">
+              <li style="margin-bottom: 8px;">Search for <strong>@PaisaTapBetaBot</strong> on Telegram.</li>
+              <li style="margin-bottom: 8px;">Launch the bot and start the session.</li>
+              <li style="margin-bottom: 8px;">Log in using your registered Telegram ID: <strong>${applicant.telegram}</strong>.</li>
+            </ol>
+          </div>
+          
+          <p>As a beta tester, you will have exclusive early access to tap-to-earn rewards and performance incentives based on your milestones.</p>
+        </div>
+        <div style="margin-top: 25px; padding-top: 15px; border-top: 1px solid #21262d; font-size: 12px; color: #8b949e; text-align: center;">
+          <p>This is an automated selection email. Please do not reply directly to this message.</p>
+          <p>&copy; ${new Date().getFullYear()} PaisaTap. All rights reserved.</p>
+        </div>
+      </div>
+    `;
+  } else if (status === 'rejected') {
+    emailSubject = 'PaisaTap - Application Status Update';
+    
+    if (reason === 'not_eligible') {
+      emailText = `Hi ${applicant.name},
+
+Thank you for your application to join the PaisaTap Beta Program.
+
+We appreciate your interest in our tap-to-earn bot; however, we regret to inform you that we are unable to accept your application at this time as you do not meet our current eligibility requirements.
+
+We will keep your details on file should our eligibility criteria change in future phases.
+
+Best regards,
+The PaisaTap Team`;
+
+      emailHtml = `
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0d1117; color: #e6edf3; padding: 30px; border-radius: 8px; max-width: 600px; margin: auto; border: 1px solid #f85149;">
+          <div style="text-align: center; border-bottom: 1px solid #21262d; padding-bottom: 20px; margin-bottom: 20px;">
+            <h1 style="color: #f85149; margin: 0; font-size: 24px; font-weight: bold;">Application Status Update</h1>
+            <p style="color: #8b949e; margin: 5px 0 0 0; font-style: italic;">PaisaTap Beta Program</p>
+          </div>
+          <div style="font-size: 16px; line-height: 1.6; color: #c9d1d9;">
+            <p>Hi <strong>${applicant.name}</strong>,</p>
+            <p>Thank you for applying to the PaisaTap Beta Tester Program. We appreciate your interest.</p>
+            <p>After reviewing your details, we regret to inform you that your application was not selected for this cohort because you do not meet our current eligibility requirements.</p>
+            <p>We will keep your contact details secure and may reach out to you should new opportunities arise in future testing phases.</p>
+          </div>
+          <div style="margin-top: 25px; padding-top: 15px; border-top: 1px solid #21262d; font-size: 12px; color: #8b949e; text-align: center;">
+            <p>&copy; ${new Date().getFullYear()} PaisaTap. All rights reserved.</p>
+          </div>
+        </div>
+      `;
+    } else if (reason === 'invalid_telegram') {
+      emailSubject = 'PaisaTap - Action Required: Invalid Telegram Username';
+      emailText = `Hi ${applicant.name},
+
+Thank you for your application to join the PaisaTap Beta Program.
+
+We attempted to review your details, but the Telegram ID/username you provided (${applicant.telegram}) appears to be invalid or does not exist. As we require a valid Telegram username to coordinate testing and send access links, we are unable to approve your application.
+
+If you made a typo, please feel free to visit our landing page and submit a new application with the correct Telegram username:
+https://paisatap-authentication-server.onrender.com
+
+Best regards,
+The PaisaTap Team`;
+
+      emailHtml = `
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0d1117; color: #e6edf3; padding: 30px; border-radius: 8px; max-width: 600px; margin: auto; border: 1px solid #f85149;">
+          <div style="text-align: center; border-bottom: 1px solid #21262d; padding-bottom: 20px; margin-bottom: 20px;">
+            <h1 style="color: #f85149; margin: 0; font-size: 24px; font-weight: bold;">Action Required: Invalid Telegram ID</h1>
+            <p style="color: #8b949e; margin: 5px 0 0 0; font-style: italic;">PaisaTap Beta Program</p>
+          </div>
+          <div style="font-size: 16px; line-height: 1.6; color: #c9d1d9;">
+            <p>Hi <strong>${applicant.name}</strong>,</p>
+            <p>Thank you for applying to the PaisaTap Beta Tester Program. We appreciate your interest.</p>
+            <p>During our review, we found that the Telegram ID/username you entered (<strong>${applicant.telegram}</strong>) is invalid or unreachable. We require a valid handle to contact you and grant early access benefits.</p>
+            <div style="background-color: #161b22; border-left: 4px solid #f85149; padding: 12px; border-radius: 4px; margin: 15px 0;">
+              <p style="margin: 0; color: #f85149; font-weight: 500;">Please re-apply:</p>
+              <p style="margin: 5px 0 0 0; font-size: 14px;">Please re-submit your details using your correct Telegram ID at our application portal: <a href="https://paisatap-authentication-server.onrender.com" style="color: #58a6ff; text-decoration: none;">https://paisatap-authentication-server.onrender.com</a></p>
+            </div>
+          </div>
+          <div style="margin-top: 25px; padding-top: 15px; border-top: 1px solid #21262d; font-size: 12px; color: #8b949e; text-align: center;">
+            <p>&copy; ${new Date().getFullYear()} PaisaTap. All rights reserved.</p>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  // Handle overrides for Resend (just in case they switch back)
+  let finalFromEmail = fromEmail;
+  if (process.env.RESEND_API_KEY) {
+    const publicDomains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'aol.com', 'icloud.com', 'mail.ru'];
+    const domain = fromEmail.split('@')[1]?.toLowerCase();
+    if (!domain || publicDomains.includes(domain) || fromEmail === 'noreply@paisatap.com') {
+      finalFromEmail = 'onboarding@resend.dev';
+    }
+  }
+
+  // Trigger dispatch
+  try {
+    if (process.env.RESEND_API_KEY) {
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`
+        },
+        body: JSON.stringify({
+          from: `PaisaTap <${finalFromEmail}>`,
+          to: applicant.email,
+          subject: emailSubject,
+          html: emailHtml
+        })
+      });
+    } else if (process.env.SENDGRID_API_KEY) {
+      await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`
+        },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email: applicant.email }] }],
+          from: { email: finalFromEmail, name: 'PaisaTap' },
+          subject: emailSubject,
+          content: [{ type: 'text/html', value: emailHtml }]
+        })
+      });
+    } else if (process.env.BREVO_API_KEY) {
+      await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': process.env.BREVO_API_KEY
+        },
+        body: JSON.stringify({
+          sender: { name: 'PaisaTap', email: finalFromEmail },
+          to: [{ email: applicant.email }],
+          subject: emailSubject,
+          htmlContent: emailHtml
+        })
+      });
+    } else {
+      const mailOptions = {
+        from: `"PaisaTap" <${finalFromEmail}>`,
+        to: applicant.email,
+        subject: emailSubject,
+        text: emailText,
+        html: emailHtml
+      };
+      await transporter.sendMail(mailOptions);
+    }
+    console.log(`Status notification email (${status}) successfully sent to ${applicant.email}`);
+  } catch (err) {
+    console.error(`Failed to send status notification email to ${applicant.email}:`, err.message);
+  }
+}
 
 // For Render deployment: Catch-all route to serve the SPA
 app.get('*', (req, res) => {

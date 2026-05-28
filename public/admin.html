@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PaisaTap - Admin Dashboard</title>
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Custom Stylesheet (shared + custom additions) -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="admin-body">
+
+  <!-- Top Accent Background Gradients -->
+  <div class="bg-gradient-orb orb-purple"></div>
+  <div class="bg-gradient-orb orb-green"></div>
+
+  <!-- PASSWORD LOGIN OVERLAY -->
+  <div id="loginOverlay" class="admin-login-overlay">
+    <div class="glass-card login-card">
+      <div class="login-header">
+        <div class="logo-image-container margin-auto">
+          <img src="logo.jpg" alt="PaisaTap Logo" class="logo-img">
+        </div>
+        <h2>Admin Authentication</h2>
+        <p>Access is restricted to authorized developers.</p>
+      </div>
+      <form id="loginForm">
+        <div class="input-group">
+          <label for="adminPassword">Enter Admin Password</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-lock input-icon"></i>
+            <input type="password" id="adminPassword" placeholder="••••••••" required>
+          </div>
+          <span class="validation-error" id="loginError"></span>
+        </div>
+        <button type="submit" class="btn btn-primary">
+          <span class="btn-text">Authenticate</span>
+          <span class="btn-spinner"><i class="fa-solid fa-circle-notch fa-spin"></i></span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MAIN DASHBOARD CONTENT -->
+  <div id="dashboardWrapper" class="admin-dashboard-wrapper" style="display: none;">
+    <!-- Admin Header -->
+    <header class="app-header">
+      <div class="logo-container">
+        <div class="logo-image-container">
+          <img src="logo.jpg" alt="PaisaTap Logo" class="logo-img">
+        </div>
+        <span class="logo-text">Paisa<span class="highlight">Tap</span> <span class="admin-badge">Admin</span></span>
+      </div>
+      <button id="logoutBtn" class="admin-logout-btn">
+        <i class="fa-solid fa-right-from-bracket"></i> Logout
+      </button>
+    </header>
+
+    <main class="admin-main">
+      <!-- Statistics Row -->
+      <section class="metrics-row">
+        <div class="metric-card">
+          <div class="metric-info">
+            <span class="metric-label">Total Applications</span>
+            <h3 id="statTotal">0</h3>
+          </div>
+          <div class="metric-icon m-blue"><i class="fa-solid fa-folder-open"></i></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-info">
+            <span class="metric-label">Pending Review</span>
+            <h3 id="statPending" class="status-color-pending">0</h3>
+          </div>
+          <div class="metric-icon m-yellow"><i class="fa-solid fa-hourglass-half"></i></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-info">
+            <span class="metric-label">Approved Testers</span>
+            <h3 id="statApproved" class="status-color-approved">0</h3>
+          </div>
+          <div class="metric-icon m-green"><i class="fa-solid fa-circle-check"></i></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-info">
+            <span class="metric-label">Rejected Candidates</span>
+            <h3 id="statRejected" class="status-color-rejected">0</h3>
+          </div>
+          <div class="metric-icon m-red"><i class="fa-solid fa-circle-xmark"></i></div>
+        </div>
+      </section>
+
+      <!-- Applications Table -->
+      <section class="table-section">
+        <div class="glass-card table-card">
+          <div class="table-header">
+            <h3>Beta Tester Submissions</h3>
+            <button id="refreshBtn" class="refresh-btn">
+              <i class="fa-solid fa-rotate-right"></i> Refresh
+            </button>
+          </div>
+          
+          <div class="table-responsive">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Date & Time</th>
+                  <th>Full Name</th>
+                  <th>Email Address</th>
+                  <th>Telegram Username</th>
+                  <th class="text-center">Age</th>
+                  <th class="text-center">Status</th>
+                  <th class="text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="applicationsTableBody">
+                <!-- Injected via JavaScript -->
+                <tr>
+                  <td colspan="7" class="loading-placeholder">
+                    <i class="fa-solid fa-circle-notch fa-spin"></i> Fetching applications...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>&copy; 2026 PaisaTap Admin Portal. Confidential.</p>
+    </footer>
+  </div>
+
+  <!-- REJECTION DIALOG MODAL -->
+  <div id="rejectionModal" class="modal-overlay" style="display: none;">
+    <div class="glass-card modal-card">
+      <div class="modal-header">
+        <h3>Select Rejection Reason</h3>
+        <button id="closeModalBtn" class="close-modal-btn"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <p>Please select a reason for rejecting <strong id="rejectTargetName">applicant</strong>. This will trigger a customized notification email containing details on this decision.</p>
+        
+        <div class="rejection-options">
+          <label class="reason-option-card">
+            <input type="radio" name="rejectReason" value="not_eligible" checked>
+            <span class="reason-info">
+              <span class="reason-title">1. Not Eligible</span>
+              <span class="reason-description">The applicant does not meet our minimum requirements (e.g. minimum age restriction, location, etc.).</span>
+            </span>
+          </label>
+          
+          <label class="reason-option-card">
+            <input type="radio" name="rejectReason" value="invalid_telegram">
+            <span class="reason-info">
+              <span class="reason-title">2. Invalid Telegram ID / Username</span>
+              <span class="reason-description">The provided Telegram username does not exist or cannot be reached. Invitation to re-apply is sent.</span>
+            </span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="cancelRejectBtn" class="btn btn-secondary">Cancel</button>
+        <button id="confirmRejectBtn" class="btn btn-danger">Confirm Rejection</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST FEEDBACK WIDGET -->
+  <div id="toastNotification" class="toast-notification">
+    <div class="toast-content">
+      <i id="toastIcon" class="fa-solid fa-circle-info"></i>
+      <span id="toastText">Action successful</span>
+    </div>
+  </div>
+
+  <!-- Script logic -->
+  <script src="admin.js"></script>
+</body>
+</html>

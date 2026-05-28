@@ -14,9 +14,11 @@ PaisaTap is a highly polished, single-page web application designed for recruiti
   - Age: Acceptance of numeric values with a minimum age limit of 18.
 - **Explicit Consent**: Required checkbox confirming acceptance of Privacy Policy and Terms of Service before submission.
 - **Expandable Legal Sections**: Beautiful accordion panels containing Privacy Policy and Terms of Service clauses.
-- **SMTP Confirmations**: Automatic dispatch of a customizable HTML confirmation email upon successful registration.
+- **SMTP & HTTP Email API Integrations**: Direct integration with standard SMTP as well as fallbacks for Brevo, Resend, and SendGrid Web APIs to easily bypass Render port restrictions.
+- **Secure Admin Dashboard**: Access-protected dashboard located at `/admin.html` with real-time statistics counters, applicant grid, Approve and Reject decision flows, and rejection reason selections.
+- **Outcome Email Dispatches**: Auto-sends custom welcome emails on approval or reason-specific rejections (e.g. not eligible or invalid Telegram handles).
+- **Local JSON DB Persistence**: Simple file-based applicant tracking database (`data/applications.json`).
 - **Deploy-Ready for Render**: Runs via simple start command and relies on environment variable bindings.
-- **Failsafe Testing Mode**: Automatically boots using a mock transporter or Nodemailer Ethereal test account if SMTP credentials are not specified in the local `.env`.
 
 ---
 
@@ -24,15 +26,19 @@ PaisaTap is a highly polished, single-page web application designed for recruiti
 
 ```text
 paisatap/
+├── data/
+│   └── applications.json # Local database storage (automatically initialized)
 ├── public/
-│   ├── index.html   # Main application structural HTML
-│   ├── style.css    # Premium CSS design styles & layouts
-│   └── app.js       # Client validations & async form AJAX requests
+│   ├── index.html   # Main application landing page UI
+│   ├── admin.html   # Admin dashboard UI
+│   ├── style.css    # Premium CSS styles (Landing page + Admin Dashboard)
+│   ├── app.js       # Client validation and landing page controller
+│   └── admin.js     # Admin verification, charts, and application status manager
 ├── .env.example     # Template for configuration environment variables
 ├── .env             # Local configuration file (git-ignored)
 ├── .gitignore       # Exclusion lists for node_modules and env secrets
 ├── package.json     # Node dependencies & execution scripts
-└── server.js        # Express server, Helmet headers, rate limiting, SMTP dispatcher
+└── server.js        # Express server, Helmet security, rate limiting, APIs, routes
 ```
 
 ---
@@ -61,7 +67,7 @@ paisatap/
    cp .env.example .env
    ```
 
-4. Configure your SMTP provider settings inside `.env`. If you do not specify SMTP credentials, the application will automatically spin up a temporary **Ethereal test email account** and log message links in the console.
+4. Configure your SMTP provider settings or HTTP Email API keys (e.g. Brevo) along with the dashboard administrator password inside `.env`.
    ```ini
    PORT=3000
    SMTP_HOST=smtp.example.com
@@ -69,6 +75,12 @@ paisatap/
    SMTP_USER=your_smtp_username
    SMTP_PASS=your_smtp_password
    SMTP_FROM_EMAIL=noreply@paisatap.com
+   
+   # Or HTTP Email API Keys (highly recommended on Render to bypass port blocks)
+   BREVO_API_KEY=xsmtpsib-example-key
+   
+   # Admin credentials
+   ADMIN_PASSWORD=PaisaTapAdmin2026
    ```
 
 5. Run in development mode (with auto-reloading):
@@ -103,10 +115,11 @@ This repository is optimized for quick, native deployment on [Render](https://re
    - **Start Command**: `npm start`
 4. **Define Environment Variables**:
    Under the **Environment** tab, click **Add Environment Variable** and declare the following variables:
-   - `SMTP_HOST` (e.g. `smtp.sendgrid.net`, `smtp.mailgun.org`, etc.)
-   - `SMTP_PORT` (e.g. `587` or `465`)
-   - `SMTP_USER` (Your SMTP service username)
-   - `SMTP_PASS` (Your SMTP service password or API key)
-   - `SMTP_FROM_EMAIL` (Verified sender email address, e.g. `applications@paisatap.com`)
-   - *Note: `PORT` is dynamically managed by Render; you do not need to manually configure it.*
-5. **Deploy**: Click **Deploy Web Service**. Render will install dependencies, build the application, and host the static pages and submit endpoint.
+   - `BREVO_API_KEY` or `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` (Email dispatch provider)
+   - `SMTP_FROM_EMAIL` (Verified sender email address registered with Brevo/SMTP, e.g., `tweet.mrai@gmail.com`)
+   - `ADMIN_PASSWORD` (Password for the dashboard, e.g., `PaisaTapAdmin2026`)
+   - *Note: `PORT` is dynamically managed by Render; you do not need to configure it.*
+5. **Deploy**: Click **Deploy Web Service**. Render will install dependencies, compile assets, and launch the service.
+6. **Data Persistence Notice**:
+   > [!NOTE]
+   > The local JSON database (`data/applications.json`) is ephemeral and resets on Render restarts/redeployments. For persistent storage in production, consider attaching a persistent disk volume on Render (mounting at `/data`) or migrating to a database provider.
