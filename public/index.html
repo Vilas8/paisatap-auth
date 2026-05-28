@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PaisaTap - Apply for Exclusive Beta Access</title>
+  <!-- SEO Meta Tags -->
+  <meta name="description" content="Apply for early access beta testing of the PaisaTap tap-to-earn bot. Selected beta testers may receive exclusive early benefits and conditional rewards.">
+  <meta name="keywords" content="PaisaTap, Tap to Earn, Beta Tester, Early Access, Crypto Bot, Telegram Bot">
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Top Accent Background Gradients -->
+  <div class="bg-gradient-orb orb-purple"></div>
+  <div class="bg-gradient-orb orb-green"></div>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="logo-container">
+        <div class="logo-icon">
+          <i class="fa-solid fa-coins logo-icon-spin"></i>
+        </div>
+        <span class="logo-text">Paisa<span class="highlight">Tap</span></span>
+      </div>
+      <div class="header-badge">
+        <span class="badge-dot"></span> Beta Test Phase 1
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="app-main">
+      <!-- Hero Section -->
+      <section class="hero-section">
+        <h1 class="hero-title">Apply for Exclusive Beta Access</h1>
+        <p class="hero-subtitle">
+          PaisaTap is looking for a small group of dedicated beta testers to trial our upcoming tap-to-earn bot. 
+          Help shape the future of mobile rewards and secure your chance at exclusive early-access perks.
+        </p>
+        <div class="features-grid">
+          <div class="feature-card">
+            <div class="feature-icon"><i class="fa-solid fa-rocket"></i></div>
+            <h3>Early Access</h3>
+            <p>Experience new tap-to-earn features and test our telegram bot before general public release.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon"><i class="fa-solid fa-gift"></i></div>
+            <h3>Conditional Rewards</h3>
+            <p>Selected testers may be eligible for performance and participation-based rewards upon project milestones.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon"><i class="fa-solid fa-users"></i></div>
+            <h3>Shape the Product</h3>
+            <p>Collaborate closely with developers by reporting bugs and suggesting UI optimizations.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Form Section -->
+      <section class="form-section">
+        <div class="glass-card form-card">
+          <div class="card-header">
+            <h2>Beta Application Form</h2>
+            <p>Please provide your application details below. All fields are required.</p>
+          </div>
+
+          <form id="applicationForm" novalidate>
+            <!-- Name Input -->
+            <div class="input-group">
+              <label for="fullName">Full Name</label>
+              <div class="input-wrapper">
+                <i class="fa-regular fa-user input-icon"></i>
+                <input type="text" id="fullName" name="name" placeholder="John Doe" required minlength="2" maxlength="80">
+              </div>
+              <span class="validation-error" id="nameError"></span>
+            </div>
+
+            <!-- Email Input -->
+            <div class="input-group">
+              <label for="emailAddress">Email Address</label>
+              <div class="input-wrapper">
+                <i class="fa-regular fa-envelope input-icon"></i>
+                <input type="email" id="emailAddress" name="email" placeholder="john@example.com" required>
+              </div>
+              <span class="validation-error" id="emailError"></span>
+            </div>
+
+            <!-- Telegram Username Input -->
+            <div class="input-group">
+              <label for="telegramUser">Telegram ID / Username</label>
+              <div class="input-wrapper">
+                <i class="fa-brands fa-telegram input-icon"></i>
+                <input type="text" id="telegramUser" name="telegram" placeholder="@username" required>
+              </div>
+              <span class="helper-text">Standard Telegram handle format (e.g., @john_doe or john_doe)</span>
+              <span class="validation-error" id="telegramError"></span>
+            </div>
+
+            <!-- Age Input -->
+            <div class="input-group">
+              <label for="ageVal">Age</label>
+              <div class="input-wrapper">
+                <i class="fa-regular fa-calendar input-icon"></i>
+                <input type="number" id="ageVal" name="age" placeholder="18" required min="18" max="110">
+              </div>
+              <span class="helper-text">Applicants must be 18 or older to apply.</span>
+              <span class="validation-error" id="ageError"></span>
+            </div>
+
+            <!-- Legal Agreement Checkbox -->
+            <div class="checkbox-group">
+              <label class="checkbox-container">
+                <input type="checkbox" id="legalConsent" name="consent" required>
+                <span class="checkmark"></span>
+                <span class="checkbox-label">
+                  I accept and explicitly consent to the <a href="#privacySection" class="legal-link" id="triggerPrivacy">Privacy Policy</a> and <a href="#termsSection" class="legal-link" id="triggerTerms">Terms of Service</a>.
+                </span>
+              </label>
+              <span class="validation-error" id="consentError"></span>
+            </div>
+
+            <!-- Submit Button -->
+            <button type="submit" id="submitBtn" class="btn btn-primary">
+              <span class="btn-text">Submit Application</span>
+              <span class="btn-spinner"><i class="fa-solid fa-circle-notch fa-spin"></i></span>
+            </button>
+          </form>
+
+          <!-- Toast Messages / Feedback Blocks inside Card -->
+          <div class="alert-box alert-success" id="successAlert" role="alert">
+            <div class="alert-icon"><i class="fa-solid fa-circle-check"></i></div>
+            <div class="alert-content">
+              <h4>Submission Successful!</h4>
+              <p id="successMessage">Thank you for your application! A confirmation email has been sent. We will review your details soon.</p>
+            </div>
+          </div>
+
+          <div class="alert-box alert-error" id="errorAlert" role="alert">
+            <div class="alert-icon"><i class="fa-solid fa-circle-xmark"></i></div>
+            <div class="alert-content">
+              <h4>Submission Failed</h4>
+              <p id="errorMessage">An error occurred while processing your application. Please check your inputs and try again.</p>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Legal Sections Accordions -->
+      <section class="legal-accordion-section">
+        <div class="accordion-container">
+          
+          <!-- Privacy Policy Accordion -->
+          <div class="accordion-item" id="privacySection">
+            <button class="accordion-header" aria-expanded="false" aria-controls="privacyContent" type="button">
+              <span><i class="fa-solid fa-shield-halved accordion-icon-left"></i> Privacy Policy</span>
+              <i class="fa-solid fa-chevron-down accordion-arrow"></i>
+            </button>
+            <div class="accordion-content" id="privacyContent" hidden>
+              <div class="accordion-inner">
+                <h3>1. Information We Collect</h3>
+                <p>We only collect the specific personal details provided in the beta application form: Full Name, Email Address, Telegram Username/ID, and Age. We explicitly do NOT collect phone numbers or payment information during this phase.</p>
+
+                <h3>2. Purpose and Consent</h3>
+                <p>By submitting this application, you give your explicit consent for PaisaTap to use your provided details to evaluate your suitability for our beta testing program, and to contact you with updates and instructions should you be selected.</p>
+
+                <h3>3. How We Use and Share Information</h3>
+                <p>We use this data solely to select testers and manage communication. We do not sell, rent, or lease your personal information to third parties. We store no unnecessary data and aim to purge application details once the testing cohorts are finalized and selection processes end.</p>
+
+                <h3>4. Security of Data</h3>
+                <p>We deploy standard encryption and transmission safeguards. However, because data transmitted over the internet is never 100% secure, you share this information at your own discretion.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Terms of Service Accordion -->
+          <div class="accordion-item" id="termsSection">
+            <button class="accordion-header" aria-expanded="false" aria-controls="termsContent" type="button">
+              <span><i class="fa-solid fa-scale-balanced accordion-icon-left"></i> Terms of Service</span>
+              <i class="fa-solid fa-chevron-down accordion-arrow"></i>
+            </button>
+            <div class="accordion-content" id="termsContent" hidden>
+              <div class="accordion-inner">
+                <h3>1. Application & No Selection Guarantee</h3>
+                <p>Submitting a beta application does NOT guarantee entry into the PaisaTap beta program. The developer reserves sole discretion in selecting, removing, or ignoring application submissions.</p>
+
+                <h3>2. Participant Eligibility</h3>
+                <p>Applicants must be at least 18 years of age. Applications from individuals under 18 will be rejected automatically by validation rules.</p>
+
+                <h3>3. Beta Nature and Rewards</h3>
+                <p>The beta bot is experimental software. Any mention of rewards is conditional, performance-based, and non-guaranteed. Rewards are subject to change, criteria adjustments, or cancellation without notice. No payments or rewards are guaranteed.</p>
+
+                <h3>4. Electronic Communications</h3>
+                <p>By applying, you agree that PaisaTap may email you or contact you on Telegram regarding beta testing, feedback surveys, and bug reports. You can request removal of your data at any time by contacting our support team.</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>&copy; 2026 PaisaTap. All rights reserved.</p>
+      <p class="footer-subtext">
+        Disclaimer: PaisaTap is an experimental tap-to-earn bot. All rewards, tokens, or early incentives mentioned are conditional, non-guaranteed, and dependent upon performance, participation, and program rules.
+      </p>
+      <p class="footer-links">
+        <span class="footer-email"><i class="fa-solid fa-envelope"></i> contact@paisatap.com</span>
+      </p>
+    </footer>
+  </div>
+
+  <!-- Client-side Logic Script -->
+  <script src="app.js"></script>
+</body>
+</html>
