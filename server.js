@@ -223,38 +223,98 @@ This email was sent automatically in response to your beta application.`;
       </div>
     `;
 
-    // 2. Send email
-    let emailSent = false;
+    // 2. Send email to applicant
+    let confirmationSent = false;
     let errorDetails = '';
+
+    // Generate Admin Notification content
+    const adminSubject = `[New Beta Application] ${name.trim()}`;
+    const adminText = `A new beta tester application has been received for PaisaTap.
+
+Applicant Details:
+-----------------------------
+Name: ${name.trim()}
+Email: ${email.trim()}
+Telegram: ${telegramClean}
+Age: ${ageNumber}
+-----------------------------
+Time of submission: ${new Date().toISOString()}
+`;
+    const adminHtml = `
+      <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #080c10; color: #f0f6fc; padding: 30px; border-radius: 8px; max-width: 600px; margin: auto; border: 1px solid rgba(255, 255, 255, 0.08);">
+        <div style="text-align: center; border-bottom: 1px solid #21262d; padding-bottom: 20px; margin-bottom: 20px;">
+          <h1 style="color: #8957e5; margin: 0; font-size: 24px; font-weight: bold; letter-spacing: 0.5px;">New Application Received</h1>
+          <p style="color: #8b949e; margin: 5px 0 0 0; font-size: 14px;">PaisaTap Beta Tester Recruitment</p>
+        </div>
+        <div style="font-size: 15px; color: #c9d1d9;">
+          <p style="margin-bottom: 15px;">A new candidate has applied for the beta program:</p>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; background-color: #0d1117; border-radius: 6px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.05);">
+            <tr>
+              <td style="padding: 12px 15px; font-weight: bold; border-bottom: 1px solid #21262d; color: #8b949e; width: 35%;">Full Name:</td>
+              <td style="padding: 12px 15px; border-bottom: 1px solid #21262d; color: #ffffff;">${name.trim()}</td>
+            </tr>
+            <tr>
+              <td style="padding: 12px 15px; font-weight: bold; border-bottom: 1px solid #21262d; color: #8b949e;">Email Address:</td>
+              <td style="padding: 12px 15px; border-bottom: 1px solid #21262d; color: #ffffff;"><a href="mailto:${email.trim()}" style="color: #58a6ff; text-decoration: none;">${email.trim()}</a></td>
+            </tr>
+            <tr>
+              <td style="padding: 12px 15px; font-weight: bold; border-bottom: 1px solid #21262d; color: #8b949e;">Telegram ID:</td>
+              <td style="padding: 12px 15px; border-bottom: 1px solid #21262d; color: #ffffff;">
+                <a href="https://t.me/${telegramClean.replace('@', '')}" style="color: #58a6ff; text-decoration: none;" target="_blank">${telegramClean}</a>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 12px 15px; font-weight: bold; color: #8b949e;">Age:</td>
+              <td style="padding: 12px 15px; color: #ffffff;">${ageNumber}</td>
+            </tr>
+          </table>
+          <p style="font-size: 13px; color: #8b949e; font-style: italic;">Submitted on: ${new Date().toLocaleString()}</p>
+        </div>
+      </div>
+    `;
 
     // A. Resend Web API
     if (process.env.RESEND_API_KEY) {
       console.log('RESEND_API_KEY detected. Sending email via Resend HTTP API...');
       try {
-        const bodyPayload = {
-          from: `PaisaTap <${fromEmail}>`,
-          to: email.trim(),
-          subject: emailSubject,
-          html: emailHtml
-        };
-        if (adminEmail) {
-          bodyPayload.bcc = adminEmail;
-        }
-
         const response = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${process.env.RESEND_API_KEY}`
           },
-          body: JSON.stringify(bodyPayload)
+          body: JSON.stringify({
+            from: `PaisaTap <${fromEmail}>`,
+            to: email.trim(),
+            subject: emailSubject,
+            html: emailHtml
+          })
         });
         const resData = await response.json();
         if (response.ok) {
-          emailSent = true;
-          console.log(`Email sent via Resend API. ID: ${resData.id}`);
+          confirmationSent = true;
+          console.log(`Confirmation sent to applicant via Resend API. ID: ${resData.id}`);
         } else {
           errorDetails = `Resend API Error: ${resData.message || response.statusText}`;
+        }
+
+        // Send admin notification
+        if (confirmationSent && adminEmail && adminEmail.toLowerCase() !== email.trim().toLowerCase()) {
+          fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${process.env.RESEND_API_KEY}`
+            },
+            body: JSON.stringify({
+              from: `PaisaTap System <${fromEmail}>`,
+              to: adminEmail,
+              subject: adminSubject,
+              html: adminHtml
+            })
+          }).then(res => res.json()).then(data => {
+            console.log('Admin notification sent via Resend:', data.id);
+          }).catch(err => console.error('Admin notification failed via Resend:', err.message));
         }
       } catch (err) {
         errorDetails = `Resend HTTP Fetch Error: ${err.message}`;
@@ -264,11 +324,6 @@ This email was sent automatically in response to your beta application.`;
     else if (process.env.SENDGRID_API_KEY) {
       console.log('SENDGRID_API_KEY detected. Sending email via SendGrid HTTP API...');
       try {
-        const personalizationObj = { to: [{ email: email.trim() }] };
-        if (adminEmail) {
-          personalizationObj.bcc = [{ email: adminEmail }];
-        }
-
         const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
           method: 'POST',
           headers: {
@@ -276,18 +331,36 @@ This email was sent automatically in response to your beta application.`;
             'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`
           },
           body: JSON.stringify({
-            personalizations: [personalizationObj],
+            personalizations: [{ to: [{ email: email.trim() }] }],
             from: { email: fromEmail, name: 'PaisaTap' },
             subject: emailSubject,
             content: [{ type: 'text/html', value: emailHtml }]
           })
         });
         if (response.ok) {
-          emailSent = true;
-          console.log('Email sent via SendGrid API.');
+          confirmationSent = true;
+          console.log('Confirmation sent to applicant via SendGrid API.');
         } else {
           const resData = await response.json().catch(() => ({}));
           errorDetails = `SendGrid API Error: ${resData.errors?.[0]?.message || response.statusText}`;
+        }
+
+        // Send admin notification
+        if (confirmationSent && adminEmail && adminEmail.toLowerCase() !== email.trim().toLowerCase()) {
+          fetch('https://api.sendgrid.com/v3/mail/send', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`
+            },
+            body: JSON.stringify({
+              personalizations: [{ to: [{ email: adminEmail }] }],
+              from: { email: fromEmail, name: 'PaisaTap System' },
+              subject: adminSubject,
+              content: [{ type: 'text/html', value: adminHtml }]
+            })
+          }).then(() => console.log('Admin notification sent via SendGrid.'))
+            .catch(err => console.error('Admin notification failed via SendGrid:', err.message));
         }
       } catch (err) {
         errorDetails = `SendGrid HTTP Fetch Error: ${err.message}`;
@@ -297,30 +370,44 @@ This email was sent automatically in response to your beta application.`;
     else if (process.env.BREVO_API_KEY) {
       console.log('BREVO_API_KEY detected. Sending email via Brevo HTTP API...');
       try {
-        const bodyPayload = {
-          sender: { name: 'PaisaTap', email: fromEmail },
-          to: [{ email: email.trim() }],
-          subject: emailSubject,
-          htmlContent: emailHtml
-        };
-        if (adminEmail) {
-          bodyPayload.bcc = [{ email: adminEmail }];
-        }
-
         const response = await fetch('https://api.brevo.com/v3/smtp/email', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'api-key': process.env.BREVO_API_KEY
           },
-          body: JSON.stringify(bodyPayload)
+          body: JSON.stringify({
+            sender: { name: 'PaisaTap', email: fromEmail },
+            to: [{ email: email.trim() }],
+            subject: emailSubject,
+            htmlContent: emailHtml
+          })
         });
         const resData = await response.json();
         if (response.ok) {
-          emailSent = true;
-          console.log(`Email sent via Brevo API. Message ID: ${resData.messageId}`);
+          confirmationSent = true;
+          console.log(`Confirmation sent to applicant via Brevo API. ID: ${resData.messageId}`);
         } else {
           errorDetails = `Brevo API Error: ${resData.message || response.statusText}`;
+        }
+
+        // Send admin notification
+        if (confirmationSent && adminEmail && adminEmail.toLowerCase() !== email.trim().toLowerCase()) {
+          fetch('https://api.brevo.com/v3/smtp/email', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'api-key': process.env.BREVO_API_KEY
+            },
+            body: JSON.stringify({
+              sender: { name: 'PaisaTap System', email: fromEmail },
+              to: [{ email: adminEmail }],
+              subject: adminSubject,
+              htmlContent: adminHtml
+            })
+          }).then(res => res.json()).then(data => {
+            console.log('Admin notification sent via Brevo:', data.messageId);
+          }).catch(err => console.error('Admin notification failed via Brevo:', err.message));
         }
       } catch (err) {
         errorDetails = `Brevo HTTP Fetch Error: ${err.message}`;
@@ -336,19 +423,30 @@ This email was sent automatically in response to your beta application.`;
         text: emailText,
         html: emailHtml
       };
-      if (adminEmail) {
-        mailOptions.bcc = adminEmail;
-      }
 
       const info = await transporter.sendMail(mailOptions);
-      emailSent = true;
+      confirmationSent = true;
       console.log(`Application confirmation sent to ${email} via SMTP. Message ID: ${info.messageId}`);
       if (transporter.isTestAccount) {
         console.log(`Ethereal Email Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
       }
+
+      // Send admin notification
+      if (adminEmail && adminEmail.toLowerCase() !== email.trim().toLowerCase()) {
+        const adminMailOptions = {
+          from: `"PaisaTap System" <${fromEmail}>`,
+          to: adminEmail,
+          subject: adminSubject,
+          text: adminText,
+          html: adminHtml
+        };
+        transporter.sendMail(adminMailOptions)
+          .then(info => console.log('Admin notification sent via SMTP:', info.messageId))
+          .catch(err => console.error('Admin notification failed via SMTP:', err.message));
+      }
     }
 
-    if (emailSent) {
+    if (confirmationSent) {
       return res.status(200).json({
         success: true,
         message: 'Application submitted successfully! Please check your email for confirmation.'
