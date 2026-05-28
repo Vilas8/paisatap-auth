@@ -315,11 +315,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const name = rejectTargetName.textContent;
+    const appId = targetApplicantId;
     closeRejectionModal();
     showToast(`Rejecting ${name}...`, 'info');
 
     try {
-      const response = await fetch(`/api/admin/applications/${targetApplicantId}/status`, {
+      const response = await fetch(`/api/admin/applications/${appId}/status`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
