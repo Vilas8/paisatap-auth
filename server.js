@@ -73,9 +73,15 @@ async function setupMailTransporter() {
       host: host,
       port: parseInt(port, 10),
       secure: parseInt(port, 10) === 465, // true for port 465, false for 587 or 25
+      pool: true, // Enable connection pooling
+      maxConnections: 5,
+      maxMessages: 100,
       auth: {
         user: user,
         pass: pass
+      },
+      tls: {
+        rejectUnauthorized: false // Bypasses self-signed certificate and trust chain errors
       },
       connectionTimeout: 8000, // 8 seconds connection timeout
       greetingTimeout: 5000,   // 5 seconds greeting timeout
@@ -96,6 +102,9 @@ async function setupMailTransporter() {
         auth: {
           user: testAccount.user,
           pass: testAccount.pass
+        },
+        tls: {
+          rejectUnauthorized: false // Bypass for test account connection safety
         },
         connectionTimeout: 8000, // 8 seconds
         greetingTimeout: 5000,   // 5 seconds
@@ -157,7 +166,7 @@ app.post('/api/apply', applicationLimiter, async (req, res) => {
   }
 
   try {
-    const fromEmail = process.env.SMTP_FROM_EMAIL || 'noreply@paisatap.com';
+    const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || 'noreply@paisatap.com';
     const emailSubject = 'PaisaTap - Beta Tester Application Received';
     const emailText = `Thank you for your application. We have received your details and will review them soon. If selected, we will contact you with the next steps.
 
