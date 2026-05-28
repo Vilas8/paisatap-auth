@@ -178,7 +178,19 @@ app.post('/api/apply', applicationLimiter, async (req, res) => {
   }
 
   try {
-    const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || 'noreply@paisatap.com';
+    let fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || 'noreply@paisatap.com';
+    
+    // Safety check for Resend: public email domains (like Gmail) cannot be verified.
+    // We override to onboarding@resend.dev for testing so it succeeds.
+    if (process.env.RESEND_API_KEY) {
+      const publicDomains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'aol.com', 'icloud.com', 'mail.ru'];
+      const domain = fromEmail.split('@')[1]?.toLowerCase();
+      if (!domain || publicDomains.includes(domain) || fromEmail === 'noreply@paisatap.com') {
+        console.log(`Resend detected with public/unverified sender '${fromEmail}'. Overriding to 'onboarding@resend.dev' for sandbox delivery.`);
+        fromEmail = 'onboarding@resend.dev';
+      }
+    }
+
     const emailSubject = 'PaisaTap - Beta Tester Application Received';
     const emailText = `Thank you for your application. We have received your details and will review them soon. If selected, we will contact you with the next steps.
 
