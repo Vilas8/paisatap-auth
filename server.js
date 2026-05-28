@@ -13,35 +13,21 @@ const PORT = process.env.PORT || 3000;
 // Trust proxy configuration for Render reverse-proxies
 app.set('trust proxy', 1);
 
-// Local JSON Persistence Setup
-const DATA_DIR = path.join(__dirname, 'data');
-const DATA_FILE = path.join(DATA_DIR, 'applications.json');
+const { createClient } = require('@supabase/supabase-js');
 
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR);
-}
-if (!fs.existsSync(DATA_FILE)) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify([]));
-}
+// Supabase Connection Setup
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+let supabase = null;
 
-function getApplications() {
-  try {
-    const data = fs.readFileSync(DATA_FILE, 'utf8');
-    return JSON.parse(data);
-  } catch (err) {
-    console.error('Error reading applications file:', err);
-    return [];
-  }
-}
-
-function saveApplications(apps) {
-  try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(apps, null, 2), 'utf8');
-    return true;
-  } catch (err) {
-    console.error('Error writing applications file:', err);
-    return false;
-  }
+if (supabaseUrl && supabaseKey) {
+  console.log('Supabase config found. Initializing Supabase client...');
+  supabase = createClient(supabaseUrl, supabaseKey);
+} else {
+  console.warn(
+    'WARNING: Supabase environment variables (SUPABASE_URL, SUPABASE_KEY) are not configured.\n' +
+    'Database operations will fail.'
+  );
 }
 
 // Security configuration using Helmet
@@ -213,21 +199,30 @@ app.post('/api/apply', applicationLimiter, async (req, res) => {
     let fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || 'noreply@paisatap.com';
     const adminEmail = process.env.SMTP_USER || process.env.SMTP_FROM_EMAIL;
 
-    // Save application details to local JSON file
-    const apps = getApplications();
-    const newApp = {
-      id: 'app_' + Date.now() + Math.random().toString(36).substr(2, 5),
-      name: name.trim(),
-      email: email.trim(),
-      telegram: telegramClean,
-      age: ageNumber,
-      consent: consent,
-      status: 'pending',
-      rejectionReason: null,
-      submittedAt: new Date().toISOString()
-    };
-    apps.push(newApp);
-    saveApplications(apps);
+    // Save application details to Supabase
+    if (!supabase) {
+      throw new Error('Database connection is not configured.');
+    }
+
+    const appId = 'app_' + Date.now() + Math.random().toString(36).substr(2, 5);
+    const { error: insertError } = await supabase
+      .from('applications')
+      .insert({
+        id: appId,
+        name: name.trim(),
+        email: email.trim(),
+        telegram: telegramClean,
+        age: ageNumber,
+        consent: consent,
+        status: 'pending',
+        rejection_reason: null,
+        submitted_at: new Date().toISOString()
+      });
+
+    if (insertError) {
+      console.error('Supabase DB insert error:', insertError.message);
+      throw new Error('Database persistence failed: ' + insertError.message);
+    }
     
     // Safety check for Resend: public email domains (like Gmail) cannot be verified.
     // We override to onboarding@resend.dev for testing so it succeeds.
@@ -539,21 +534,56 @@ app.post('/api/admin/verify', (req, res) => {
 });
 
 // GET API Endpoint to fetch applications
-app.get('/api/admin/applications', adminAuth, (req, res) => {
-  const apps = getApplications();
-  // Sort: pending first, then by submittedAt descending
-  apps.sort((a, b) => {
-    if (a.status === 'pending' && b.status !== 'pending') return -1;
-    if (a.status !== 'pending' && b.status === 'pending') return 1;
-    return new Date(b.submittedAt) - new Date(a.submittedAt);
-  });
-  res.status(200).json({ success: true, applications: apps });
+app.get('/api/admin/applications', adminAuth, async (req, res) => {
+  if (!supabase) {
+    return res.status(500).json({ success: false, message: 'Database connection is not configured.' });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('applications')
+      .select('*');
+
+    if (error) {
+      console.error('Error fetching applications from Supabase:', error.message);
+      return res.status(500).json({ success: false, message: 'Failed to retrieve applications.' });
+    }
+
+    // Sort: pending first, then by submitted_at descending
+    data.sort((a, b) => {
+      if (a.status === 'pending' && b.status !== 'pending') return -1;
+      if (a.status !== 'pending' && b.status === 'pending') return 1;
+      return new Date(b.submitted_at) - new Date(a.submitted_at);
+    });
+
+    const mappedApps = data.map(app => ({
+      id: app.id,
+      name: app.name,
+      email: app.email,
+      telegram: app.telegram,
+      age: app.age,
+      consent: app.consent,
+      status: app.status,
+      rejectionReason: app.rejection_reason,
+      submittedAt: app.submitted_at,
+      processedAt: app.processed_at
+    }));
+
+    res.status(200).json({ success: true, applications: mappedApps });
+  } catch (err) {
+    console.error('Error in GET /api/admin/applications:', err.message);
+    res.status(500).json({ success: false, message: 'Server error retrieving applications.' });
+  }
 });
 
 // POST API Endpoint to update status and send outcome email
 app.post('/api/admin/applications/:id/status', adminAuth, async (req, res) => {
   const { id } = req.params;
   const { status, rejectionReason } = req.body;
+
+  if (!supabase) {
+    return res.status(500).json({ success: false, message: 'Database connection is not configured.' });
+  }
 
   if (!['approved', 'rejected'].includes(status)) {
     return res.status(400).json({ success: false, message: 'Invalid status value.' });
@@ -563,29 +593,63 @@ app.post('/api/admin/applications/:id/status', adminAuth, async (req, res) => {
     return res.status(400).json({ success: false, message: 'Rejection reason is required.' });
   }
 
-  const apps = getApplications();
-  const appIndex = apps.findIndex(a => a.id === id);
+  try {
+    // 1. Fetch current application state
+    const { data: applicant, error: fetchError } = await supabase
+      .from('applications')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
 
-  if (appIndex === -1) {
-    return res.status(404).json({ success: false, message: 'Application not found.' });
+    if (fetchError || !applicant) {
+      console.error('Error fetching application by ID:', fetchError?.message);
+      return res.status(404).json({ success: false, message: 'Application not found.' });
+    }
+
+    const currentRejectionReason = status === 'rejected' ? rejectionReason : null;
+    const processedAt = new Date().toISOString();
+
+    // Check if status is already up to date
+    if (applicant.status === status && applicant.rejection_reason === currentRejectionReason) {
+      return res.status(200).json({ success: true, message: 'Status already up to date.' });
+    }
+
+    // 2. Update status in Supabase
+    const { error: updateError } = await supabase
+      .from('applications')
+      .update({
+        status,
+        rejection_reason: currentRejectionReason,
+        processed_at: processedAt
+      })
+      .eq('id', id);
+
+    if (updateError) {
+      console.error('Error updating application status in Supabase:', updateError.message);
+      return res.status(500).json({ success: false, message: 'Failed to update application status.' });
+    }
+
+    // Create applicant object with camelCase properties to send to sendDecisionEmail
+    const updatedApplicant = {
+      id: applicant.id,
+      name: applicant.name,
+      email: applicant.email,
+      telegram: applicant.telegram,
+      age: applicant.age,
+      consent: applicant.consent,
+      status,
+      rejectionReason: currentRejectionReason,
+      processedAt
+    };
+
+    // Send status change email (async)
+    sendDecisionEmail(updatedApplicant, status, rejectionReason);
+
+    res.status(200).json({ success: true, message: `Application ${status} successfully.` });
+  } catch (err) {
+    console.error('Error in POST /api/admin/applications/:id/status:', err.message);
+    res.status(500).json({ success: false, message: 'Server error updating status.' });
   }
-
-  const applicant = apps[appIndex];
-  
-  if (applicant.status === status && applicant.rejectionReason === rejectionReason) {
-    return res.status(200).json({ success: true, message: 'Status already up to date.' });
-  }
-
-  applicant.status = status;
-  applicant.rejectionReason = status === 'rejected' ? rejectionReason : null;
-  applicant.processedAt = new Date().toISOString();
-
-  saveApplications(apps);
-
-  // Send status change email
-  sendDecisionEmail(applicant, status, rejectionReason);
-
-  res.status(200).json({ success: true, message: `Application ${status} successfully.` });
 });
 
 // Helper function to send email notification to applicant
