@@ -18,11 +18,13 @@ app.use(
         styleSrc: [
           "'self'",
           "'unsafe-inline'",
-          "https://fonts.googleapis.com"
+          "https://fonts.googleapis.com",
+          "https://cdnjs.cloudflare.com"
         ],
         fontSrc: [
           "'self'",
-          "https://fonts.gstatic.com"
+          "https://fonts.gstatic.com",
+          "https://cdnjs.cloudflare.com"
         ],
         scriptSrc: [
           "'self'",
@@ -74,7 +76,10 @@ async function setupMailTransporter() {
       auth: {
         user: user,
         pass: pass
-      }
+      },
+      connectionTimeout: 8000, // 8 seconds connection timeout
+      greetingTimeout: 5000,   // 5 seconds greeting timeout
+      socketTimeout: 10000     // 10 seconds socket timeout
     });
   } else {
     console.warn(
@@ -91,7 +96,10 @@ async function setupMailTransporter() {
         auth: {
           user: testAccount.user,
           pass: testAccount.pass
-        }
+        },
+        connectionTimeout: 8000, // 8 seconds
+        greetingTimeout: 5000,   // 5 seconds
+        socketTimeout: 10000     // 10 seconds
       });
       transporter.isTestAccount = true;
     } catch (err) {
