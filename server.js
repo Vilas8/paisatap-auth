@@ -223,11 +223,10 @@ This email was sent automatically in response to your beta application.`;
 
   } catch (error) {
     console.error('SMTP Email dispatch error:', error);
-    // Even if SMTP fails, return 200/500? Wait, if the SMTP config is invalid or fails, let's inform the client.
-    // However, to keep it resilient, let's return a detailed message.
+    // Return a descriptive error message to help debug SMTP configuration issues
     return res.status(500).json({
       success: false,
-      message: 'Form submitted, but we failed to send the confirmation email. Please verify your email is correct and try again.'
+      message: `Form submitted, but we failed to send the confirmation email. Error details: ${error.message}`
     });
   }
 });
