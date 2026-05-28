@@ -9,6 +9,9 @@ const nodemailer = require('nodemailer');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust proxy configuration for Render reverse-proxies
+app.set('trust proxy', 1);
+
 // Security configuration using Helmet
 app.use(
   helmet({
@@ -208,27 +211,120 @@ This email was sent automatically in response to your beta application.`;
     `;
 
     // 2. Send email
-    const mailOptions = {
-      from: `"PaisaTap" <${fromEmail}>`,
-      to: email.trim(),
-      subject: emailSubject,
-      text: emailText,
-      html: emailHtml
-    };
+    let emailSent = false;
+    let errorDetails = '';
 
-    const info = await transporter.sendMail(mailOptions);
-    
-    // Log details of sent mail (including test account preview URL if Ethereal is used)
-    console.log(`Application confirmation sent to ${email}. Message ID: ${info.messageId}`);
-    if (transporter.isTestAccount) {
-      console.log(`Ethereal Email Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
+    // A. Resend Web API
+    if (process.env.RESEND_API_KEY) {
+      console.log('RESEND_API_KEY detected. Sending email via Resend HTTP API...');
+      try {
+        const response = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.RESEND_API_KEY}`
+          },
+          body: JSON.stringify({
+            from: `PaisaTap <${fromEmail}>`,
+            to: email.trim(),
+            subject: emailSubject,
+            html: emailHtml
+          })
+        });
+        const resData = await response.json();
+        if (response.ok) {
+          emailSent = true;
+          console.log(`Email sent via Resend API. ID: ${resData.id}`);
+        } else {
+          errorDetails = `Resend API Error: ${resData.message || response.statusText}`;
+        }
+      } catch (err) {
+        errorDetails = `Resend HTTP Fetch Error: ${err.message}`;
+      }
+    }
+    // B. SendGrid Web API
+    else if (process.env.SENDGRID_API_KEY) {
+      console.log('SENDGRID_API_KEY detected. Sending email via SendGrid HTTP API...');
+      try {
+        const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`
+          },
+          body: JSON.stringify({
+            personalizations: [{ to: [{ email: email.trim() }] }],
+            from: { email: fromEmail, name: 'PaisaTap' },
+            subject: emailSubject,
+            content: [{ type: 'text/html', value: emailHtml }]
+          })
+        });
+        if (response.ok) {
+          emailSent = true;
+          console.log('Email sent via SendGrid API.');
+        } else {
+          const resData = await response.json().catch(() => ({}));
+          errorDetails = `SendGrid API Error: ${resData.errors?.[0]?.message || response.statusText}`;
+        }
+      } catch (err) {
+        errorDetails = `SendGrid HTTP Fetch Error: ${err.message}`;
+      }
+    }
+    // C. Brevo Web API
+    else if (process.env.BREVO_API_KEY) {
+      console.log('BREVO_API_KEY detected. Sending email via Brevo HTTP API...');
+      try {
+        const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'api-key': process.env.BREVO_API_KEY
+          },
+          body: JSON.stringify({
+            sender: { name: 'PaisaTap', email: fromEmail },
+            to: [{ email: email.trim() }],
+            subject: emailSubject,
+            htmlContent: emailHtml
+          })
+        });
+        const resData = await response.json();
+        if (response.ok) {
+          emailSent = true;
+          console.log(`Email sent via Brevo API. Message ID: ${resData.messageId}`);
+        } else {
+          errorDetails = `Brevo API Error: ${resData.message || response.statusText}`;
+        }
+      } catch (err) {
+        errorDetails = `Brevo HTTP Fetch Error: ${err.message}`;
+      }
+    }
+    // D. SMTP Fallback
+    else {
+      console.log('No HTTP API keys found. Dispatching via Nodemailer SMTP...');
+      const mailOptions = {
+        from: `"PaisaTap" <${fromEmail}>`,
+        to: email.trim(),
+        subject: emailSubject,
+        text: emailText,
+        html: emailHtml
+      };
+
+      const info = await transporter.sendMail(mailOptions);
+      emailSent = true;
+      console.log(`Application confirmation sent to ${email} via SMTP. Message ID: ${info.messageId}`);
+      if (transporter.isTestAccount) {
+        console.log(`Ethereal Email Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
+      }
     }
 
-    // 3. Return success response
-    return res.status(200).json({
-      success: true,
-      message: 'Application submitted successfully! Please check your email for confirmation.'
-    });
+    if (emailSent) {
+      return res.status(200).json({
+        success: true,
+        message: 'Application submitted successfully! Please check your email for confirmation.'
+      });
+    } else {
+      throw new Error(errorDetails || 'Failed to dispatch email via configured channels.');
+    }
 
   } catch (error) {
     console.error('SMTP Email dispatch error:', error);
