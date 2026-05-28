@@ -179,6 +179,7 @@ app.post('/api/apply', applicationLimiter, async (req, res) => {
 
   try {
     let fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || 'noreply@paisatap.com';
+    const adminEmail = process.env.SMTP_USER || process.env.SMTP_FROM_EMAIL;
     
     // Safety check for Resend: public email domains (like Gmail) cannot be verified.
     // We override to onboarding@resend.dev for testing so it succeeds.
@@ -230,18 +231,23 @@ This email was sent automatically in response to your beta application.`;
     if (process.env.RESEND_API_KEY) {
       console.log('RESEND_API_KEY detected. Sending email via Resend HTTP API...');
       try {
+        const bodyPayload = {
+          from: `PaisaTap <${fromEmail}>`,
+          to: email.trim(),
+          subject: emailSubject,
+          html: emailHtml
+        };
+        if (adminEmail) {
+          bodyPayload.bcc = adminEmail;
+        }
+
         const response = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${process.env.RESEND_API_KEY}`
           },
-          body: JSON.stringify({
-            from: `PaisaTap <${fromEmail}>`,
-            to: email.trim(),
-            subject: emailSubject,
-            html: emailHtml
-          })
+          body: JSON.stringify(bodyPayload)
         });
         const resData = await response.json();
         if (response.ok) {
@@ -258,6 +264,11 @@ This email was sent automatically in response to your beta application.`;
     else if (process.env.SENDGRID_API_KEY) {
       console.log('SENDGRID_API_KEY detected. Sending email via SendGrid HTTP API...');
       try {
+        const personalizationObj = { to: [{ email: email.trim() }] };
+        if (adminEmail) {
+          personalizationObj.bcc = [{ email: adminEmail }];
+        }
+
         const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
           method: 'POST',
           headers: {
@@ -265,7 +276,7 @@ This email was sent automatically in response to your beta application.`;
             'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`
           },
           body: JSON.stringify({
-            personalizations: [{ to: [{ email: email.trim() }] }],
+            personalizations: [personalizationObj],
             from: { email: fromEmail, name: 'PaisaTap' },
             subject: emailSubject,
             content: [{ type: 'text/html', value: emailHtml }]
@@ -286,18 +297,23 @@ This email was sent automatically in response to your beta application.`;
     else if (process.env.BREVO_API_KEY) {
       console.log('BREVO_API_KEY detected. Sending email via Brevo HTTP API...');
       try {
+        const bodyPayload = {
+          sender: { name: 'PaisaTap', email: fromEmail },
+          to: [{ email: email.trim() }],
+          subject: emailSubject,
+          htmlContent: emailHtml
+        };
+        if (adminEmail) {
+          bodyPayload.bcc = [{ email: adminEmail }];
+        }
+
         const response = await fetch('https://api.brevo.com/v3/smtp/email', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'api-key': process.env.BREVO_API_KEY
           },
-          body: JSON.stringify({
-            sender: { name: 'PaisaTap', email: fromEmail },
-            to: [{ email: email.trim() }],
-            subject: emailSubject,
-            htmlContent: emailHtml
-          })
+          body: JSON.stringify(bodyPayload)
         });
         const resData = await response.json();
         if (response.ok) {
@@ -320,6 +336,9 @@ This email was sent automatically in response to your beta application.`;
         text: emailText,
         html: emailHtml
       };
+      if (adminEmail) {
+        mailOptions.bcc = adminEmail;
+      }
 
       const info = await transporter.sendMail(mailOptions);
       emailSent = true;
