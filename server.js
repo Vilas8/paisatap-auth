@@ -69,24 +69,33 @@ async function setupMailTransporter() {
 
   if (host && port && user && pass) {
     console.log('SMTP settings found. Instantiating mail transporter...');
-    transporter = nodemailer.createTransport({
-      host: host,
-      port: parseInt(port, 10),
-      secure: parseInt(port, 10) === 465, // true for port 465, false for 587 or 25
-      pool: true, // Enable connection pooling
-      maxConnections: 5,
-      maxMessages: 100,
+    
+    const transportConfig = {
       auth: {
         user: user,
         pass: pass
       },
-      tls: {
+      connectionTimeout: 10000, // 10 seconds connection timeout
+      greetingTimeout: 8000,   // 8 seconds greeting timeout
+      socketTimeout: 15000     // 15 seconds socket timeout
+    };
+
+    if (host.toLowerCase().includes('gmail.com')) {
+      console.log('Gmail service detected. Configuring optimized Gmail transporter settings...');
+      transportConfig.service = 'gmail';
+    } else {
+      transportConfig.host = host;
+      transportConfig.port = parseInt(port, 10);
+      transportConfig.secure = parseInt(port, 10) === 465; // true for port 465, false for 587 or 25
+      transportConfig.pool = true; // Enable connection pooling
+      transportConfig.maxConnections = 5;
+      transportConfig.maxMessages = 100;
+      transportConfig.tls = {
         rejectUnauthorized: false // Bypasses self-signed certificate and trust chain errors
-      },
-      connectionTimeout: 8000, // 8 seconds connection timeout
-      greetingTimeout: 5000,   // 5 seconds greeting timeout
-      socketTimeout: 10000     // 10 seconds socket timeout
-    });
+      };
+    }
+
+    transporter = nodemailer.createTransport(transportConfig);
   } else {
     console.warn(
       'WARNING: SMTP environment variables are not fully configured.\n' +
